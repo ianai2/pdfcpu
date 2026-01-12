@@ -213,6 +213,13 @@ func (sb *SimpleBox) calcTransform(mLeft, mBottom, mRight, mTop, bWidth float64)
 		x, y = types.AnchorPosition(sb.anchor, r, sb.Width, sb.Height)
 	} else {
 		x, y = types.NormalizeCoord(sb.x, sb.y, cBox, pdf.origin, false)
+
+		// For UpperLeft origin, y is the TOP of the box after NormalizeCoord
+		// Convert to bottom position for rectangle drawing
+		if pdf.origin == types.UpperLeft && y > 0 {
+			y = y - sb.Height
+		}
+
 		if y < 0 {
 			y = cBox.Center().Y - sb.Height/2 - r.LL.Y
 		} else if y > 0 {

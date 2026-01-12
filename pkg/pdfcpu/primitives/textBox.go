@@ -39,7 +39,8 @@ type TextBox struct {
 	Anchor   string
 	anchor   types.Anchor
 	anchored bool
-	Width    float64
+	Width    float64 `json:"width"`
+	Height   float64 `json:"height"` // Box height for vertical alignment
 	Opacity  float64 `json:"opacity"` // 0.0-1.0 transparency
 
 	Font    *FormFont
@@ -49,8 +50,10 @@ type TextBox struct {
 
 	BackgroundColor string `json:"bgCol"`
 	bgCol           *color.SimpleColor
-	Alignment       string `json:"align"` // "Left", "Center", "Right"
+	Alignment       string `json:"align"`  // "Left", "Center", "Right"
 	horAlign        types.HAlignment
+	VAlignment      string `json:"valign"` // "Top", "Middle", "Bottom"
+	valign          types.VAlignment
 	RTL             bool
 	Rotation        float64 `json:"rot"`
 	Hide            bool
@@ -130,6 +133,23 @@ func (tb *TextBox) validateHorAlign() error {
 	return nil
 }
 
+func (tb *TextBox) validateVAlignment() error {
+	tb.valign = types.AlignTop // Default to AlignTop for UpperLeft origin
+	if tb.VAlignment != "" {
+		switch strings.ToLower(tb.VAlignment) {
+		case "top":
+			tb.valign = types.AlignTop
+		case "middle", "center":
+			tb.valign = types.AlignMiddle
+		case "bottom":
+			tb.valign = types.AlignBottom
+		default:
+			return errors.Errorf("pdfcpu: invalid vertical alignment: %s", tb.VAlignment)
+		}
+	}
+	return nil
+}
+
 func (tb *TextBox) validate() error {
 
 	tb.x = tb.Position[0]
@@ -163,7 +183,11 @@ func (tb *TextBox) validate() error {
 		return err
 	}
 
-	return tb.validateHorAlign()
+	if err := tb.validateHorAlign(); err != nil {
+		return err
+	}
+
+	return tb.validateVAlignment()
 }
 
 func (tb *TextBox) font(name string) *FormFont {
@@ -211,6 +235,10 @@ func (tb *TextBox) mergeIn(tb0 *TextBox) {
 		tb.Width = tb0.Width
 	}
 
+	if tb.Height == 0 {
+		tb.Height = tb0.Height
+	}
+
 	if tb.Margin == nil {
 		tb.Margin = tb0.Margin
 	}
@@ -229,6 +257,10 @@ func (tb *TextBox) mergeIn(tb0 *TextBox) {
 
 	if tb.horAlign == types.AlignLeft {
 		tb.horAlign = tb0.horAlign
+	}
+
+	if tb.valign == types.AlignTop {
+		tb.valign = tb0.valign
 	}
 
 	if tb.bgCol == nil {
@@ -307,19 +339,21 @@ func (tb *TextBox) prepareTextDescriptor(p *model.Page, pageNr int, fonts model.
 	dx, dy := types.NormalizeOffset(tb.Dx, tb.Dy, pdf.origin)
 
 	td := model.TextDescriptor{
-		Text:     t,
-		Dx:       dx,
-		Dy:       dy,
-		HAlign:   tb.horAlign,
-		VAlign:   types.AlignBottom,
-		FontName: fontName,
-		Embed:    true,
-		FontKey:  id,
-		FontSize: fontSize,
-		Scale:    1.,
-		ScaleAbs: true,
-		Rotation: tb.Rotation,
-		RTL:      tb.RTL, // for user fonts only!
+		Text:      t,
+		Dx:        dx,
+		Dy:        dy,
+		HAlign:    tb.horAlign,
+		VAlign:    tb.valign,
+		FontName:  fontName,
+		Embed:     true,
+		FontKey:   id,
+		FontSize:  fontSize,
+		Scale:     1.,
+		ScaleAbs:  true,
+		Rotation:  tb.Rotation,
+		RTL:       tb.RTL, // for user fonts only!
+		Origin:    pdf.origin,
+		BoxHeight: tb.Height,
 	}
 
 	if col != nil {

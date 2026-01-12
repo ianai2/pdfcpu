@@ -559,6 +559,13 @@ func (ib *ImageBox) calcTransform(
 		x, y = types.AnchorPosition(ib.anchor, r, ib.Width, ib.Height)
 	} else {
 		x, y = types.NormalizeCoord(ib.x, ib.y, cBox, ib.pdf.origin, false)
+
+		// For UpperLeft origin, y is the TOP of the image after NormalizeCoord
+		// Convert to bottom position for image drawing
+		if ib.pdf.origin == types.UpperLeft && y > 0 {
+			y = y - ib.Height
+		}
+
 		if y < 0 {
 			y = cBox.Center().Y - ib.Height/2 - r.LL.Y
 		} else if y > 0 {

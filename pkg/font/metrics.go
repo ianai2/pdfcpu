@@ -199,6 +199,25 @@ var UserFontDir string
 var UserFontMetrics = map[string]TTFLight{}
 var UserFontMetricsLock = &sync.RWMutex{}
 
+// coreFontTypoMetrics contains AFM Ascender/Descender values for core fonts.
+// These typographic metrics are more accurate than bounding box values for text positioning.
+// Values extracted from Core14_AFMs/*.afm files.
+var coreFontTypoMetrics = map[string]struct{ Ascender, Descender int }{
+	"Helvetica":             {718, -207},
+	"Helvetica-Bold":        {718, -207},
+	"Helvetica-Oblique":     {718, -207},
+	"Helvetica-BoldOblique": {718, -207},
+	"Times-Roman":           {683, -217},
+	"Times-Bold":            {683, -217},
+	"Times-Italic":          {683, -217},
+	"Times-BoldItalic":      {683, -217},
+	"Courier":               {629, -157},
+	"Courier-Bold":          {629, -157},
+	"Courier-Oblique":       {629, -157},
+	"Courier-BoldOblique":   {629, -157},
+	// Symbol and ZapfDingbats use bounding box (no typographic metrics)
+}
+
 // Lazy loading synchronization
 var loadUserFontsOnce sync.Once
 var loadUserFontsErr error
@@ -338,20 +357,134 @@ func fontScalingFactor(glyphSpaceUnits, userSpaceUnits float64) int {
 
 // Descent returns fontname's descent in userspace units corresponding to fontSize.
 func Descent(fontName string, fontSize int) float64 {
-	fbb := BoundingBox(fontName)
-	return UserSpaceUnits(-fbb.LL.Y, fontSize)
+	if IsCoreFont(fontName) {
+		// Use AFM typographic metrics if available
+		if typo, ok := coreFontTypoMetrics[fontName]; ok {
+			return UserSpaceUnits(float64(-typo.Descender), fontSize)
+		}
+		// Fallback to bounding box for Symbol, ZapfDingbats
+		fbb := BoundingBox(fontName)
+		return UserSpaceUnits(-fbb.LL.Y, fontSize)
+	}
+	// For user fonts, use OS/2 table's sTypoDescender for accurate vertical positioning
+	EnsureUserFontsLoaded()
+	UserFontMetricsLock.RLock()
+	defer UserFontMetricsLock.RUnlock()
+	ttf, ok := UserFontMetrics[fontName]
+	if !ok || ttf.Descent == 0 {
+		// Fallback to bounding box if font not found or invalid
+		fbb := BoundingBox(fontName)
+		return UserSpaceUnits(-fbb.LL.Y, fontSize)
+	}
+	// Descent is negative in TTF (below baseline), return absolute value
+	return UserSpaceUnits(float64(-ttf.Descent), fontSize)
 }
 
 // Ascent returns fontname's ascent in userspace units corresponding to fontSize.
 func Ascent(fontName string, fontSize int) float64 {
-	fbb := BoundingBox(fontName)
-	return UserSpaceUnits(fbb.Height()+fbb.LL.Y, fontSize)
+	if IsCoreFont(fontName) {
+		// Use AFM typographic metrics if available
+		if typo, ok := coreFontTypoMetrics[fontName]; ok {
+			return UserSpaceUnits(float64(typo.Ascender), fontSize)
+		}
+		// Fallback to bounding box for Symbol, ZapfDingbats
+		fbb := BoundingBox(fontName)
+		return UserSpaceUnits(fbb.Height()+fbb.LL.Y, fontSize)
+	}
+	// For user fonts, use OS/2 table's sTypoAscender for accurate vertical positioning
+	EnsureUserFontsLoaded()
+	UserFontMetricsLock.RLock()
+	defer UserFontMetricsLock.RUnlock()
+	ttf, ok := UserFontMetrics[fontName]
+	if !ok || ttf.Ascent == 0 {
+		// Fallback to bounding box if font not found or invalid
+		fbb := BoundingBox(fontName)
+		return UserSpaceUnits(fbb.Height()+fbb.LL.Y, fontSize)
+	}
+	return UserSpaceUnits(float64(ttf.Ascent), fontSize)
 }
 
 // LineHeight returns fontname's line height in userspace units corresponding to fontSize.
 func LineHeight(fontName string, fontSize int) float64 {
-	fbb := BoundingBox(fontName)
-	return UserSpaceUnits(fbb.Height(), fontSize)
+	if IsCoreFont(fontName) {
+		// Use AFM typographic metrics if available
+		if typo, ok := coreFontTypoMetrics[fontName]; ok {
+			// Ascender - Descender (Descender is negative, so this adds)
+			return UserSpaceUnits(float64(typo.Ascender-typo.Descender), fontSize)
+		}
+		// Fallback to bounding box for Symbol, ZapfDingbats
+		fbb := BoundingBox(fontName)
+		return UserSpaceUnits(fbb.Height(), fontSize)
+	}
+	// For user fonts, use OS/2 table's Ascent - Descent for accurate line height
+	EnsureUserFontsLoaded()
+	UserFontMetricsLock.RLock()
+	defer UserFontMetricsLock.RUnlock()
+	ttf, ok := UserFontMetrics[fontName]
+	if !ok || (ttf.Ascent == 0 && ttf.Descent == 0) {
+		// Fallback to bounding box if font not found or invalid
+		fbb := BoundingBox(fontName)
+		return UserSpaceUnits(fbb.Height(), fontSize)
+	}
+	// Line height = Ascent - Descent (descent is negative, so this adds)
+	return UserSpaceUnits(float64(ttf.Ascent-ttf.Descent), fontSize)
+}
+
+// HeightOfFontAtSize returns the text height matching pdfme's heightOfFontAtSize formula.
+// This equals the ascent in user space units (baseline to top of text).
+func HeightOfFontAtSize(fontName string, fontSize int) float64 {
+	if IsCoreFont(fontName) {
+		if typo, ok := coreFontTypoMetrics[fontName]; ok {
+			// Core fonts use 1000 units per em (standard for Type1/AFM)
+			return float64(typo.Ascender) / 1000.0 * float64(fontSize)
+		}
+		// Fallback to bounding box for Symbol, ZapfDingbats
+		fbb := BoundingBox(fontName)
+		return (fbb.Height() + fbb.LL.Y) / 1000.0 * float64(fontSize)
+	}
+	// User fonts
+	EnsureUserFontsLoaded()
+	UserFontMetricsLock.RLock()
+	defer UserFontMetricsLock.RUnlock()
+	ttf, ok := UserFontMetrics[fontName]
+	if !ok || ttf.Ascent == 0 {
+		fbb := BoundingBox(fontName)
+		return (fbb.Height() + fbb.LL.Y) / 1000.0 * float64(fontSize)
+	}
+	unitsPerEm := float64(ttf.UnitsPerEm)
+	if unitsPerEm == 0 {
+		unitsPerEm = 1000
+	}
+	return float64(ttf.Ascent) / unitsPerEm * float64(fontSize)
+}
+
+// DescentInPt returns the descent as a NEGATIVE value matching pdfme's getFontDescentInPt.
+// This is the distance below the baseline (negative = below baseline).
+func DescentInPt(fontName string, fontSize int) float64 {
+	if IsCoreFont(fontName) {
+		if typo, ok := coreFontTypoMetrics[fontName]; ok {
+			// Descender is already negative in our map (e.g., -207)
+			return float64(typo.Descender) / 1000.0 * float64(fontSize)
+		}
+		// Fallback to bounding box for Symbol, ZapfDingbats
+		fbb := BoundingBox(fontName)
+		return fbb.LL.Y / 1000.0 * float64(fontSize) // LL.Y is negative
+	}
+	// User fonts
+	EnsureUserFontsLoaded()
+	UserFontMetricsLock.RLock()
+	defer UserFontMetricsLock.RUnlock()
+	ttf, ok := UserFontMetrics[fontName]
+	if !ok {
+		fbb := BoundingBox(fontName)
+		return fbb.LL.Y / 1000.0 * float64(fontSize)
+	}
+	unitsPerEm := float64(ttf.UnitsPerEm)
+	if unitsPerEm == 0 {
+		unitsPerEm = 1000
+	}
+	// ttf.Descent is already negative (e.g., -120)
+	return float64(ttf.Descent) / unitsPerEm * float64(fontSize)
 }
 
 func glyphSpaceWidth(text, fontName string) int {

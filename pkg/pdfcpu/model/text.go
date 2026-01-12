@@ -65,6 +65,8 @@ type TextDescriptor struct {
 	ShowMargins    bool                // Render margins in light gray.
 	ShowPosition   bool                // Highlight position.
 	HairCross      bool                // Draw haircross at X,Y
+	Origin         types.Corner        // Coordinate origin for proper interpretation (UpperLeft or LowerLeft)
+	BoxHeight      float64             // Element height for UpperLeft positioning
 }
 
 func deltaAlignMiddle(fontName string, fontSize, lines int, mTop, mBot float64) float64 {
@@ -467,15 +469,52 @@ func createBoundingBoxForColumn(xRefTable *XRefTable, r *types.Rectangle, x, y *
 
 	// Apply vertical alignment.
 	var dy1 float64
-	switch td.VAlign {
-	case types.AlignTop:
-		dy1 = deltaAlignTop(td.FontName, *fontSize, mTop+borderWidth)
-	case types.AlignMiddle:
-		dy1 = deltaAlignMiddle(td.FontName, *fontSize, len(*lines), mTop, mBot)
-	case types.AlignBottom:
-		dy1 = deltaAlignBottom(td.FontName, *fontSize, len(*lines), mBot)
+
+	if td.Origin == types.UpperLeft && td.BoxHeight > 0 {
+		// For UpperLeft: Y is box TOP, need to position baseline within box
+		lineHeight := font.LineHeight(td.FontName, *fontSize)
+		numLines := float64(len(*lines))
+
+		// Use 80% of fontSize for consistent positioning across all fonts
+		// (font-specific ascent causes different fonts to appear at different positions)
+		ascentOffset := float64(*fontSize) * 0.8
+
+		switch td.VAlign {
+		case types.AlignTop:
+			// First baseline at: boxTop - ascentOffset (consistent across fonts)
+			dy1 = -ascentOffset - mTop - borderWidth
+		case types.AlignMiddle:
+			// Center text block in box
+			// Position baseline so text appears visually centered
+			// For n lines, the visual center of text is roughly at the middle baseline
+			// Middle baseline is at: firstBaseline + (n-1)/2 * lineHeight
+			// We want this at -boxHeight/2 from the top
+			dy1 = -td.BoxHeight/2 + (numLines-1)*lineHeight/2
+		case types.AlignBottom:
+			// Last baseline positioned so descenders stay within box
+			descentOffset := float64(*fontSize) * 0.2
+			dy1 = -td.BoxHeight + (numLines-1)*lineHeight + mBot + borderWidth + descentOffset
+		}
+	} else {
+		// Original alignment logic for LowerLeft origin
+		switch td.VAlign {
+		case types.AlignTop:
+			dy1 = deltaAlignTop(td.FontName, *fontSize, mTop+borderWidth)
+		case types.AlignMiddle:
+			dy1 = deltaAlignMiddle(td.FontName, *fontSize, len(*lines), mTop, mBot)
+		case types.AlignBottom:
+			dy1 = deltaAlignBottom(td.FontName, *fontSize, len(*lines), mBot)
+		}
 	}
-	*y += math.Ceil(dy1)
+
+	// Apply the vertical offset
+	// For UpperLeft origin, use Floor since dy1 is negative (moving down in PDF coords)
+	// For LowerLeft origin, use Ceil (original behavior)
+	if td.Origin == types.UpperLeft && td.BoxHeight > 0 {
+		*y += math.Floor(dy1)
+	} else {
+		*y += math.Ceil(dy1)
+	}
 
 	box, maxLine := calcBoundingBoxForLines(*lines, *x, *y, td.FontName, *fontSize)
 	// maxLine for hAlign != AlignJustify only!
@@ -486,6 +525,15 @@ func createBoundingBoxForColumn(xRefTable *XRefTable, r *types.Rectangle, x, y *
 
 	if td.MinHeight > 0 && box.Height() < td.MinHeight {
 		box.LL.Y = box.UR.Y - td.MinHeight
+	}
+
+	// For UpperLeft origin with BoxHeight, ensure the bounding box uses the full height
+	if td.Origin == types.UpperLeft && td.BoxHeight > 0 {
+		// The box top should be at the original Y position (before alignment offset)
+		// and extend down by BoxHeight
+		boxTop := *y - math.Floor(dy1) // Restore original Y
+		box.UR.Y = boxTop + mTop + borderWidth
+		box.LL.Y = boxTop - td.BoxHeight + mBot + borderWidth
 	}
 
 	horAdjustBoundingBoxForLines(r, box, dx, dy, x, y)
