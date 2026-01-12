@@ -46,6 +46,7 @@ type SimpleBox struct {
 	FillColor string `json:"fillCol"`
 	fillCol   *color.SimpleColor
 	Rotation  float64 `json:"rot"`
+	Opacity   float64 `json:"opacity"` // 0.0-1.0 transparency
 	Hide      bool
 }
 
@@ -276,6 +277,17 @@ func (sb *SimpleBox) render(p *model.Page) error {
 	m, r := sb.calcTransform(mTop, mRight, mBottom, mLeft, bWidth)
 
 	fmt.Fprintf(p.Buf, "q %.5f %.5f %.5f %.5f %.5f %.5f cm ", m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1])
+
+	// Apply graphics state for opacity
+	applyOpacity := sb.Opacity > 0 && sb.Opacity < 1.0
+	if applyOpacity {
+		gsName := fmt.Sprintf("GS_%.2f", sb.Opacity)
+		if p.GStates == nil {
+			p.GStates = make(map[string]float64)
+		}
+		p.GStates[gsName] = sb.Opacity
+		fmt.Fprintf(p.Buf, "/%s gs ", gsName)
+	}
 
 	if sb.fillCol != nil {
 		draw.FillRect(p.Buf, r, bWidth, bCol, *sb.fillCol, &bStyle)

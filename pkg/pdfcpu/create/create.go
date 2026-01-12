@@ -83,13 +83,31 @@ func addPageResources(xRefTable *model.XRefTable, d types.Dict, p model.Page, fo
 		imgRes[img.Res.ID] = *img.Res.IndRef
 	}
 
-	if len(fontRes) > 0 || len(imgRes) > 0 {
+	// Add ExtGState for opacity
+	gsRes := types.Dict{}
+	for gsName, opacity := range p.GStates {
+		gsDict := types.Dict{
+			"Type": types.Name("ExtGState"),
+			"CA":   types.Float(opacity),
+			"ca":   types.Float(opacity),
+		}
+		ir, err := xRefTable.IndRefForNewObject(gsDict)
+		if err != nil {
+			return err
+		}
+		gsRes[gsName] = *ir
+	}
+
+	if len(fontRes) > 0 || len(imgRes) > 0 || len(gsRes) > 0 {
 		resDict := types.Dict{}
 		if len(fontRes) > 0 {
 			resDict["Font"] = fontRes
 		}
 		if len(imgRes) > 0 {
 			resDict["XObject"] = imgRes
+		}
+		if len(gsRes) > 0 {
+			resDict["ExtGState"] = gsRes
 		}
 		d["Resources"] = resDict
 	}
@@ -128,7 +146,28 @@ func updatePageResources(xRefTable *model.XRefTable, d, resDict types.Dict, p mo
 		resDict["XObject"] = imgRes
 	}
 
-	if len(p.Fm) > 0 || len(p.Im) > 0 {
+	// Add ExtGState for opacity
+	if len(p.GStates) > 0 {
+		gsRes, ok := resDict["ExtGState"].(types.Dict)
+		if !ok {
+			gsRes = types.Dict{}
+		}
+		for gsName, opacity := range p.GStates {
+			gsDict := types.Dict{
+				"Type": types.Name("ExtGState"),
+				"CA":   types.Float(opacity),
+				"ca":   types.Float(opacity),
+			}
+			ir, err := xRefTable.IndRefForNewObject(gsDict)
+			if err != nil {
+				return err
+			}
+			gsRes[gsName] = *ir
+		}
+		resDict["ExtGState"] = gsRes
+	}
+
+	if len(p.Fm) > 0 || len(p.Im) > 0 || len(p.GStates) > 0 {
 		d["Resources"] = resDict
 	}
 

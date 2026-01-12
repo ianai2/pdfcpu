@@ -17,6 +17,7 @@
 package primitives
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
@@ -39,6 +40,7 @@ type TextBox struct {
 	anchor   types.Anchor
 	anchored bool
 	Width    float64
+	Opacity  float64 `json:"opacity"` // 0.0-1.0 transparency
 
 	Font    *FormFont
 	Margin  *Margin // applied to content box
@@ -433,8 +435,22 @@ func (tb *TextBox) render(p *model.Page, pageNr int, fonts model.FontMap) error 
 		td.ShowLineBB = true
 	}
 
+	// Apply graphics state for opacity
+	applyOpacity := tb.Opacity > 0 && tb.Opacity < 1.0
+	if applyOpacity {
+		gsName := fmt.Sprintf("GS_%.2f", tb.Opacity)
+		if p.GStates == nil {
+			p.GStates = make(map[string]float64)
+		}
+		p.GStates[gsName] = tb.Opacity
+		fmt.Fprintf(p.Buf, "q /%s gs ", gsName)
+	}
+
 	if tb.anchored {
 		model.WriteMultiLineAnchored(tb.pdf.XRefTable, p.Buf, r, nil, *td, tb.anchor)
+		if applyOpacity {
+			fmt.Fprint(p.Buf, "Q ")
+		}
 		return nil
 	}
 
@@ -463,6 +479,11 @@ func (tb *TextBox) render(p *model.Page, pageNr int, fonts model.FontMap) error 
 	}
 
 	model.WriteColumn(tb.pdf.XRefTable, p.Buf, r, nil, *td, float64(tb.Width))
+
+	// Restore graphics state after opacity
+	if applyOpacity {
+		fmt.Fprint(p.Buf, "Q ")
+	}
 
 	return nil
 }

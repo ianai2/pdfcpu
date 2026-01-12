@@ -80,6 +80,7 @@ type Page struct {
 	CropBox    *types.Rectangle
 	Fm         FontMap
 	Im         ImageMap
+	GStates    map[string]float64 // graphics state name -> opacity value
 	Annots     []FieldAnnotation
 	AnnotTabs  map[int]FieldAnnotation
 	LinkAnnots []LinkAnnotation
@@ -94,13 +95,14 @@ func NewPage(mediaBox, cropBox *types.Rectangle) Page {
 		CropBox:   cropBox,
 		Fm:        FontMap{},
 		Im:        ImageMap{},
+		GStates:   map[string]float64{},
 		AnnotTabs: map[int]FieldAnnotation{},
 		Buf:       new(bytes.Buffer)}
 }
 
 // NewPageWithBg creates a page for a mediaBox.
 func NewPageWithBg(mediaBox *types.Rectangle, c color.SimpleColor) Page {
-	p := Page{MediaBox: mediaBox, Fm: FontMap{}, Im: ImageMap{}, Buf: new(bytes.Buffer)}
+	p := Page{MediaBox: mediaBox, Fm: FontMap{}, Im: ImageMap{}, GStates: map[string]float64{}, Buf: new(bytes.Buffer)}
 	draw.FillRectNoBorder(p.Buf, mediaBox, c)
 	return p
 }

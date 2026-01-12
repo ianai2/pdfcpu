@@ -65,6 +65,7 @@ type ImageBox struct {
 	BackgroundColor string `json:"bgCol"`
 	bgCol           *color.SimpleColor
 	Rotation        float64 `json:"rot"`
+	Opacity         float64 `json:"opacity"` // 0.0-1.0 transparency
 	Url             string
 	Hide            bool
 	PageNr          string `json:"-"`
@@ -643,6 +644,17 @@ func (ib *ImageBox) render(p *model.Page, pageNr int, images model.ImageMap) err
 
 	fmt.Fprintf(p.Buf, "q %.5f %.5f %.5f %.5f %.5f %.5f cm ", m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1])
 
+	// Apply graphics state for opacity
+	applyOpacity := ib.Opacity > 0 && ib.Opacity < 1.0
+	if applyOpacity {
+		gsName := fmt.Sprintf("GS_%.2f", ib.Opacity)
+		if p.GStates == nil {
+			p.GStates = make(map[string]float64)
+		}
+		p.GStates[gsName] = ib.Opacity
+		fmt.Fprintf(p.Buf, "/%s gs ", gsName)
+	}
+
 	if ib.Url != "" {
 		ib.createLink(p, pageNr, r, m)
 	}
@@ -672,7 +684,13 @@ func (ib *ImageBox) render(p *model.Page, pageNr int, images model.ImageMap) err
 		dy += sy/2 - cos*(sy/2) - sin*sx/2
 
 		m = matrix.CalcTransformMatrix(sx, sy, sin, cos, dx, dy)
-		fmt.Fprintf(p.Buf, "q %.5f %.5f %.5f %.5f %.5f %.5f cm /%s Do Q ", m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1], id)
+		// Apply opacity to image as well
+		if applyOpacity {
+			gsName := fmt.Sprintf("GS_%.2f", ib.Opacity)
+			fmt.Fprintf(p.Buf, "q /%s gs %.5f %.5f %.5f %.5f %.5f %.5f cm /%s Do Q ", gsName, m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1], id)
+		} else {
+			fmt.Fprintf(p.Buf, "q %.5f %.5f %.5f %.5f %.5f %.5f cm /%s Do Q ", m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1], id)
+		}
 	}
 
 	return nil
