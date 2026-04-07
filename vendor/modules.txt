@@ -1,0 +1,50 @@
+# github.com/clipperhouse/stringish v0.1.1
+## explicit; go 1.18
+github.com/clipperhouse/stringish
+# github.com/clipperhouse/uax29/v2 v2.3.0
+## explicit; go 1.18
+github.com/clipperhouse/uax29/v2/graphemes
+github.com/clipperhouse/uax29/v2/internal/iterators
+# github.com/hhrutter/lzw v1.0.0
+## explicit; go 1.19
+github.com/hhrutter/lzw
+# github.com/hhrutter/pkcs7 v0.2.0
+## explicit; go 1.23
+github.com/hhrutter/pkcs7
+# github.com/hhrutter/tiff v1.0.2
+## explicit; go 1.19
+github.com/hhrutter/tiff
+# github.com/mattn/go-runewidth v0.0.19
+## explicit; go 1.20
+github.com/mattn/go-runewidth
+# github.com/pkg/errors v0.9.1
+## explicit
+github.com/pkg/errors
+# golang.org/x/crypto v0.46.0
+## explicit; go 1.24.0
+golang.org/x/crypto/ocsp
+# golang.org/x/image v0.38.0
+## explicit; go 1.25.0
+golang.org/x/image/ccitt
+golang.org/x/image/riff
+golang.org/x/image/vp8
+golang.org/x/image/vp8l
+golang.org/x/image/webp
+# golang.org/x/text v0.35.0
+## explicit; go 1.25.0
+golang.org/x/text/cases
+golang.org/x/text/internal
+golang.org/x/text/internal/language
+golang.org/x/text/internal/language/compact
+golang.org/x/text/internal/tag
+golang.org/x/text/language
+golang.org/x/text/runes
+golang.org/x/text/secure/bidirule
+golang.org/x/text/secure/precis
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+golang.org/x/text/width
+# gopkg.in/yaml.v2 v2.4.0
+## explicit; go 1.15
+gopkg.in/yaml.v2
