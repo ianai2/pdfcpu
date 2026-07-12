@@ -8,7 +8,7 @@ require (
 	github.com/hhrutter/tiff v1.0.2
 	github.com/mattn/go-runewidth v0.0.19
 	github.com/pkg/errors v0.9.1
-	golang.org/x/crypto v0.46.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/image v0.41.0
 	golang.org/x/text v0.37.0
 	gopkg.in/yaml.v2 v2.4.0
